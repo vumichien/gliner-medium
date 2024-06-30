@@ -1,67 +1,94 @@
-import json
-import random
-import typer
 import os
+
+os.environ["TOKENIZERS_PARALLELISM"] = "true"
+import argparse
+import random
+import json
+
+from transformers import AutoTokenizer
 import torch
+
 from gliner import GLiNERConfig, GLiNER
 from gliner.training import Trainer, TrainingArguments
 from gliner.data_processing.collator import DataCollatorWithPadding
+from gliner.utils import load_config_as_namespace
 from gliner.data_processing import WordsSplitter, GLiNERDataset
 
-os.environ["TOKENIZERS_PARALLELISM"] = "true"
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config', type=str, default="config.yaml")
+    parser.add_argument('--log_dir', type=str, default='models/')
+    parser.add_argument('--compile_model', type=bool, default=False)
+    args = parser.parse_args()
 
-train_path = "data/meal_data_gliner.json"
+    device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
 
-with open(train_path, "r", encoding="utf-8") as f:
-    data = json.load(f)
+    config = load_config_as_namespace(args.config)
+    config.log_dir = args.log_dir
 
-typer.secho(f"Data size: {len(data)}", fg=typer.colors.GREEN)
-random.shuffle(data)
-typer.secho("Data shuffled successfully!", fg=typer.colors.GREEN)
+    model_config = GLiNERConfig(**vars(config))
 
-train_data = data[:int(len(data) * 0.9)]
-test_data = data[int(len(data) * 0.9):]
-typer.secho("Dataset is splitted.", fg=typer.colors.GREEN)
+    with open(config.train_data, 'r') as f:
+        data = json.load(f)
 
-device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
-typer.secho(f"Device: {device}", fg=typer.colors.GREEN)
+    print('Dataset size:', len(data))
+    # shuffle
+    random.shuffle(data)
+    print('Dataset is shuffled...')
 
-model = GLiNER.from_pretrained("urchade/gliner_small-v1")
+    train_data = data[:int(len(data) * 0.9)]
+    test_data = data[int(len(data) * 0.9):]
 
-train_dataset = GLiNERDataset(train_data, model.config, data_processor=model.data_processor)
-test_dataset = GLiNERDataset(test_data, model.config, data_processor=model.data_processor)
+    print('Dataset is splitted...')
 
-data_collator = DataCollatorWithPadding(model.config)
+    tokenizer = AutoTokenizer.from_pretrained(model_config.model_name)
+    model_config.class_token_index = len(tokenizer)
+    tokenizer.add_tokens([model_config.ent_token, model_config.sep_token])
+    model_config.vocab_size = len(tokenizer)
 
-torch.set_float32_matmul_precision('high')
-model.to(device)
-model.compile_for_training()
+    words_splitter = WordsSplitter(model_config.words_splitter_type)
 
-training_args = TrainingArguments(
-    output_dir="models",
-    learning_rate=5e-6,
-    weight_decay=0.01,
-    others_lr=1e-5,
-    others_weight_decay=0.01,
-    lr_scheduler_type="linear",  # cosine
-    warmup_ratio=0.1,
-    per_device_train_batch_size=8,
-    per_device_eval_batch_size=8,
-    num_train_epochs=3,
-    evaluation_strategy="epoch",
-    save_steps=1000,
-    save_total_limit=10,
-    dataloader_num_workers=8,
-    use_cpu=False,
-    report_to="wandb",
-)
+    train_dataset = GLiNERDataset(train_data, model_config, tokenizer, words_splitter)
+    test_dataset = GLiNERDataset(test_data, model_config, tokenizer, words_splitter)
 
-trainer = Trainer(
-    model=model,
-    args=training_args,
-    train_dataset=train_dataset,
-    eval_dataset=test_dataset,
-    tokenizer=model.data_processor.transformer_tokenizer,
-    data_collator=data_collator,
-)
-trainer.train()
+    data_collator = DataCollatorWithPadding(model_config)
+
+    model = GLiNER(model_config, tokenizer=tokenizer, words_splitter=words_splitter)
+    model.resize_token_embeddings([model_config.ent_token, model_config.sep_token],
+                                  set_class_token_index=False,
+                                  add_tokens_to_tokenizer=False)
+
+    if args.compile_model:
+        torch.set_float32_matmul_precision('high')
+        model.to(device)
+        model.compile_for_training()
+
+    training_args = TrainingArguments(
+        output_dir=config.log_dir,
+        learning_rate=float(config.lr_encoder),
+        weight_decay=float(config.weight_decay_encoder),
+        others_lr=float(config.lr_others),
+        others_weight_decay=float(config.weight_decay_other),
+        lr_scheduler_type=config.scheduler_type,
+        warmup_ratio=config.warmup_ratio,
+        per_device_train_batch_size=config.train_batch_size,
+        per_device_eval_batch_size=config.train_batch_size,
+        max_grad_norm=config.max_grad_norm,
+        max_steps=config.num_steps,
+        evaluation_strategy="epoch",
+        save_steps=config.eval_every,
+        save_total_limit=config.save_total_limit,
+        dataloader_num_workers=8,
+        use_cpu=False,
+        report_to="none",
+    )
+
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        train_dataset=train_dataset,
+        eval_dataset=test_dataset,
+        tokenizer=tokenizer,
+        data_collator=data_collator,
+    )
+    trainer.train()
