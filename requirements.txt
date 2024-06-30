@@ -1,0 +1,6 @@
+typer
+rich
+gliner
+spacy
+janome
+ja-ginza
