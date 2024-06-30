@@ -99,3 +99,10 @@ countries = [
     "Togo", "Seychelles", "Chad", "Central African Republic", "Liberia", "Mauritania", "Sri Lanka",
     "Sierra Leone", "Equatorial Guinea", "Swaziland", "Congo (Kinshasa)", "Congo (Brazzaville)"
 ]
+
+top_common_meal_ner = [
+    "food", "ingredient", "dish", "country", "location", "food item",
+    "city", "restaurant", "organization", "business", "product",
+    "person", "cuisine", "recipe", "fruit", "dessert", "food ingredient",
+    "nationality", "brand", "spice"
+]

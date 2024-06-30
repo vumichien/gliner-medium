@@ -1,6 +1,6 @@
 import os
-
 os.environ["TOKENIZERS_PARALLELISM"] = "true"
+
 import argparse
 import random
 import json
@@ -13,12 +13,13 @@ from gliner.training import Trainer, TrainingArguments
 from gliner.data_processing.collator import DataCollatorWithPadding
 from gliner.utils import load_config_as_namespace
 from gliner.data_processing import WordsSplitter, GLiNERDataset
+from concurrent.futures import ProcessPoolExecutor
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str, default="config.yaml")
     parser.add_argument('--log_dir', type=str, default='models/')
-    parser.add_argument('--compile_model', type=bool, default=False)
+    parser.add_argument('--compile_model', action='store_true')
     args = parser.parse_args()
 
     device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
@@ -63,6 +64,10 @@ if __name__ == '__main__':
         model.to(device)
         model.compile_for_training()
 
+    with ProcessPoolExecutor() as executor:
+        num_workers = executor._max_workers
+        print(f'Number of workers: {num_workers}')
+
     training_args = TrainingArguments(
         output_dir=config.log_dir,
         learning_rate=float(config.lr_encoder),
@@ -75,10 +80,10 @@ if __name__ == '__main__':
         per_device_eval_batch_size=config.train_batch_size,
         max_grad_norm=config.max_grad_norm,
         max_steps=config.num_steps,
-        evaluation_strategy="epoch",
+        eval_strategy="epoch",
         save_steps=config.eval_every,
         save_total_limit=config.save_total_limit,
-        dataloader_num_workers=8,
+        dataloader_num_workers=num_workers,
         use_cpu=False,
         report_to="none",
     )

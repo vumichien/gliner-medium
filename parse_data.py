@@ -5,7 +5,9 @@ from src import (
     analyze_generic_data,
     upload_to_hf,
     download_from_hf,
-    extract_entities_japanese
+    extract_entities_japanese,
+    top_common_meal_ner,
+    has_top_common_ner,
 )
 import typer
 
@@ -34,6 +36,19 @@ def parse_data(input_file: str, output_file: str = "", analyze: bool = False, jp
         typer.secho("Analyzing data...", fg=typer.colors.MAGENTA)
         analyze_generic_data(parsed_data)
         typer.secho("Data analysis complete!", fg=typer.colors.GREEN)
+
+
+@app.command()
+def filter_data(input_file: str, output_file: str):
+    typer.secho(f"Reading data from {input_file}...", fg=typer.colors.MAGENTA)
+    with open(input_file, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    typer.secho(f"Length of data: {len(data)}", fg=typer.colors.GREEN)
+    filtered_data = [item for item in data if has_top_common_ner(item["ner"], top_common_meal_ner)]
+    typer.secho(f"Filtered data contains {len(filtered_data)} examples.", fg=typer.colors.GREEN)
+    typer.secho(f"Saving filtered data to {output_file}...", fg=typer.colors.MAGENTA)
+    save_data_to_file(filtered_data, output_file)
+    typer.secho("Filtered data saved successfully!", fg=typer.colors.GREEN)
 
 
 @app.command()

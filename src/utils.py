@@ -19,10 +19,8 @@ def analyze_generic_data(processed_output):
 
     average_length = sum(lengths) / len(lengths)
     average_ner = sum(len_ner) / len(len_ner)
+    most_common = [x[0] for x in Counter(unique_entities).most_common()[:20]]
     unique_entities = list(set(unique_entities))
-
-    most_common = [x[0] for x in Counter(unique_entities).most_common()[:10]]
-
     results = {
         "average_length": average_length,
         "average_ner": average_ner,
@@ -127,3 +125,10 @@ def upload_to_hf(repo_name, file_path):
 def download_from_hf(repo_name, filename):
     """Download the repository from the Hugging Face Hub."""
     hf_hub_download(repo_id=repo_name, filename=filename, repo_type="dataset", local_dir="downloaded_data")
+
+
+def has_top_common_ner(ner_list, top_common):
+    for ner in ner_list:
+        if ner[2] not in top_common:
+            return False
+    return True
