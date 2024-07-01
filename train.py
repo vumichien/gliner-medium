@@ -19,6 +19,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str, default="config.yaml")
     parser.add_argument('--log_dir', type=str, default='models/')
+    parser.add_argument('--push_to_hub', action='store_true')
     parser.add_argument('--compile_model', action='store_true')
     args = parser.parse_args()
 
@@ -86,6 +87,7 @@ if __name__ == '__main__':
         dataloader_num_workers=num_workers,
         use_cpu=False,
         report_to="none",
+        push_to_hub=args.push_to_hub,
     )
 
     trainer = Trainer(
