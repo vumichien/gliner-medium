@@ -99,3 +99,4 @@ if __name__ == '__main__':
         data_collator=data_collator,
     )
     trainer.train()
+    trainer.push_to_hub("End of training")
